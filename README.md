@@ -1,3 +1,7 @@
+# Ground Truth Annotator
+
+Supplementary project to our Junior Design Project.
+
 A lightweight, local tool designed to speed up the manual correction of AI-generated ground truth data for medical prescription handwriting OCR.
 
 Everything runs 100% locally in your browser—no medical data or images leave your machine.
