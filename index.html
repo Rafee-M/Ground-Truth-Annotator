@@ -48,7 +48,7 @@
         .controls {
             display: flex;
             align-items: center;
-            padding: 6px 15px; /* Reduced height */
+            padding: 6px 15px;
             background-color: var(--panel-bg);
             border-bottom: 1px solid var(--border-color);
             gap: 15px;
@@ -56,24 +56,22 @@
             z-index: 10;
         }
 
-        /* Fullscreen Hover-to-Show Logic */
-        body.is-fullscreen .controls {
+        /* Fullscreen & Manual Auto-Hide Logic */
+        body.is-fullscreen .controls,
+        body.auto-hide .controls {
             position: absolute;
             top: 0; left: 0; right: 0;
             transform: translateY(-100%);
             transition: transform 0.2s ease-in-out;
         }
-        body.is-fullscreen .controls:hover,
-        body.is-fullscreen .controls:focus-within {
+        body.is-fullscreen .controls:hover, body.is-fullscreen .controls:focus-within,
+        body.auto-hide .controls:hover, body.auto-hide .controls:focus-within {
             transform: translateY(0);
         }
-        /* Invisible tripwire for mouse hover in fullscreen */
-        body.is-fullscreen .controls::after {
+        body.is-fullscreen .controls::after,
+        body.auto-hide .controls::after {
             content: '';
-            position: absolute;
-            bottom: -20px; 
-            left: 0; right: 0;
-            height: 20px;
+            position: absolute; bottom: -20px; left: 0; right: 0; height: 20px;
         }
 
         .input-group { display: flex; flex-direction: column; font-size: 11px; }
@@ -88,22 +86,22 @@
         button:hover { background-color: var(--primary-hover); }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        #displayBtn { margin-left: -5px; } /* Moved slightly left */
+        #displayBtn { margin-left: -5px; }
+
+        /* Icon Button (Eye) */
+        .icon-btn {
+            background: transparent; color: var(--text-main); border: 1px solid var(--border-color);
+            padding: 6px; display: flex; align-items: center; justify-content: center;
+            border-radius: 6px; transition: background 0.2s;
+        }
+        .icon-btn:hover { background: var(--bg-color); }
+        .icon-btn svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; }
 
         /* Dark Mode Toggle Slider */
-        .theme-switch {
-            position: relative; display: inline-block;
-            width: 36px; height: 18px; margin-left: 10px;
-        }
+        .theme-switch { position: relative; display: inline-block; width: 36px; height: 18px; margin-left: 2px; }
         .theme-switch input { opacity: 0; width: 0; height: 0; }
-        .slider {
-            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #cbd5e1; transition: .3s; border-radius: 18px;
-        }
-        .slider:before {
-            position: absolute; content: ""; height: 12px; width: 12px;
-            left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%;
-        }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .3s; border-radius: 18px; }
+        .slider:before { position: absolute; content: ""; height: 12px; width: 12px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
         input:checked + .slider { background-color: #3b82f6; }
         input:checked + .slider:before { transform: translateX(18px); }
 
@@ -114,44 +112,42 @@
         #exportBtn:hover { background-color: #047857; }
 
         /* --- Workspace --- */
-        .workspace {
-            display: flex;
-            flex: 1; 
-            min-height: 0; /* Forces flexbox to compute dynamic height properly */
-            overflow: hidden;
-        }
+        .workspace { display: flex; flex: 1; min-height: 0; overflow: hidden; }
 
         .panel { background-color: var(--panel-bg); display: flex; flex-direction: column; min-width: 20%; }
         #leftPanel { width: 40%; border-right: 1px solid var(--border-color); }
         #rightPanel { flex: 1; position: relative; overflow: hidden; }
 
+        /* Swap State (Flex Order) */
+        .workspace.swapped #leftPanel { order: 3; border-right: none; border-left: 1px solid var(--border-color); }
+        .workspace.swapped #resizer { order: 2; }
+        .workspace.swapped #rightPanel { order: 1; }
+
         .resizer {
-            width: 6px; background-color: var(--border-color); cursor: col-resize; transition: background-color 0.2s; z-index: 5;
+            width: 6px; background-color: var(--border-color); cursor: col-resize; transition: background-color 0.2s; z-index: 5; position: relative;
         }
         .resizer:hover, .resizer:active { background-color: var(--primary); }
 
-        textarea {
-            width: 100%; height: 100%; resize: none; padding: 15px; border: none;
-            font-family: "Consolas", "Courier New", monospace; font-size: 14px; line-height: 1.5;
-            outline: none; background-color: var(--text-bg); color: var(--text-main);
+        /* Swap Button inside Resizer */
+        .swap-btn {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 22px; height: 22px; background-color: var(--panel-bg);
+            border: 1px solid var(--border-color); border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; font-size: 12px; color: var(--text-main);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 10;
         }
+        .swap-btn:hover { background-color: var(--bg-color); color: var(--primary); }
+
+        textarea { width: 100%; height: 100%; resize: none; padding: 15px; border: none; font-family: "Consolas", "Courier New", monospace; font-size: 14px; line-height: 1.5; outline: none; background-color: var(--text-bg); color: var(--text-main); }
         textarea:focus { background-color: var(--text-bg-focus); }
 
-        .img-container {
-            width: 100%; height: 100%; display: flex; justify-content: center; align-items: center;
-            background-color: var(--img-bg); cursor: grab; position: relative;
-        }
+        .img-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; background-color: var(--img-bg); cursor: grab; position: relative; }
         .img-container:active { cursor: grabbing; }
 
-        #prescriptionImage {
-            max-width: 100%; max-height: 100%; object-fit: contain;
-            transform-origin: center center; transition: transform 0.05s linear; pointer-events: none; 
-        }
+        #prescriptionImage { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center center; transition: transform 0.05s linear; pointer-events: none; }
         
-        .image-hint {
-            position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.6);
-            color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; pointer-events: none;
-        }
+        .image-hint { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.6); color: white; padding: 4px 8px; border-radius: 4px; font-size: 11px; pointer-events: none; }
 
         .hidden { display: none !important; }
     </style>
@@ -168,7 +164,14 @@
             <input type="file" id="folderInput" webkitdirectory directory multiple>
         </div>
         
-        <button id="displayBtn">Display / Start</button>
+        <button id="displayBtn">Start</button>
+
+        <button id="autoHideToggle" class="icon-btn" title="Toggle Auto-Hide Panel">
+            <svg id="eyeIcon" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+        </button>
 
         <label class="theme-switch" title="Toggle Dark Mode">
             <input type="checkbox" id="themeToggle">
@@ -181,15 +184,19 @@
             <button id="prevBtn" title="Shortcut: Alt + Left Arrow">&larr; Prev</button>
             <span id="counter">0 / 0</span>
             <button id="nextBtn" title="Shortcut: Alt + Right Arrow">Next &rarr;</button>
-            <button id="exportBtn" title="Shortcut: Alt + S">Export Corrected</button>
+            <button id="exportBtn" title="Shortcut: Alt + S">Export</button>
         </div>
     </div>
 
-    <div class="workspace">
+    <div class="workspace" id="workspace">
         <div class="panel" id="leftPanel">
             <textarea id="textEditor" placeholder="Transcription and JSON will appear here..." disabled></textarea>
         </div>
-        <div class="resizer" id="resizer"></div>
+        
+        <div class="resizer" id="resizer">
+            <div class="swap-btn" id="swapBtn" title="Swap Panels">&#8644;</div>
+        </div>
+        
         <div class="panel" id="rightPanel">
             <div class="img-container" id="imgContainer">
                 <img id="prescriptionImage" src="" alt="No image loaded">
@@ -203,6 +210,7 @@
         let entries = [];
         let imageMap = {};
         let currentIndex = 0;
+        let isSwapped = false;
 
         const txtInput = document.getElementById('txtInput');
         const folderInput = document.getElementById('folderInput');
@@ -216,13 +224,36 @@
         const prescriptionImage = document.getElementById('prescriptionImage');
         const resizer = document.getElementById('resizer');
         const leftPanel = document.getElementById('leftPanel');
-        const workspace = document.querySelector('.workspace');
+        const workspace = document.getElementById('workspace');
+        
         const themeToggle = document.getElementById('themeToggle');
+        const autoHideToggle = document.getElementById('autoHideToggle');
+        const eyeIcon = document.getElementById('eyeIcon');
+        const swapBtn = document.getElementById('swapBtn');
 
         // --- Dark Mode Logic ---
         themeToggle.addEventListener('change', (e) => {
             if (e.target.checked) document.documentElement.setAttribute('data-theme', 'dark');
             else document.documentElement.removeAttribute('data-theme');
+        });
+
+        // --- Auto-Hide Panel Logic ---
+        autoHideToggle.addEventListener('click', () => {
+            document.body.classList.toggle('auto-hide');
+            if (document.body.classList.contains('auto-hide')) {
+                // Closed Eye Path
+                eyeIcon.innerHTML = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>`;
+            } else {
+                // Open Eye Path
+                eyeIcon.innerHTML = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>`;
+            }
+        });
+
+        // --- Panel Swap Logic ---
+        swapBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevents triggering the resizer
+            isSwapped = !isSwapped;
+            workspace.classList.toggle('swapped');
         });
 
         // --- Data Parsing ---
@@ -300,7 +331,6 @@
 
         // --- Keyboard Shortcuts & F11 ---
         document.addEventListener('keydown', (e) => {
-            // F11 Interception
             if (e.key === 'F11') {
                 e.preventDefault();
                 if (!document.fullscreenElement) document.documentElement.requestFullscreen();
@@ -313,21 +343,29 @@
             if (e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); exportBtn.click(); }
         });
 
-        // Fullscreen Styling Toggle
         document.addEventListener('fullscreenchange', () => {
             if (document.fullscreenElement) document.body.classList.add('is-fullscreen');
             else document.body.classList.remove('is-fullscreen');
         });
 
-        // --- Splitter Logic ---
+        // --- Splitter Logic (with mathematical inversion for Swapped state) ---
         let isResizing = false;
         resizer.addEventListener('mousedown', (e) => {
+            if (e.target === swapBtn) return; // Don't trigger resize when clicking swap
             isResizing = true; document.body.style.cursor = 'col-resize'; e.preventDefault(); 
         });
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
             const workspaceRect = workspace.getBoundingClientRect();
-            let newWidthPercent = ((e.clientX - workspaceRect.left) / workspaceRect.width) * 100;
+            let newWidthPercent;
+            
+            // Adjust calculation based on which side the text panel currently is
+            if (!isSwapped) {
+                newWidthPercent = ((e.clientX - workspaceRect.left) / workspaceRect.width) * 100;
+            } else {
+                newWidthPercent = ((workspaceRect.right - e.clientX) / workspaceRect.width) * 100;
+            }
+            
             newWidthPercent = Math.max(20, Math.min(newWidthPercent, 80));
             leftPanel.style.width = `${newWidthPercent}%`;
             leftPanel.style.flex = 'none'; 
