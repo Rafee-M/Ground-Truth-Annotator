@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Ground Truth Corrector</title>
+    <style>
+        :root {
+            --bg-color: #f4f4f5;
+            --panel-bg: #ffffff;
+            --border-color: #d4d4d8;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            overflow: hidden;
+        }
+
+        /* --- Top Control Bar --- */
+        .controls {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            background-color: var(--panel-bg);
+            border-bottom: 1px solid var(--border-color);
+            gap: 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            font-size: 12px;
+        }
+
+        .input-group label {
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--text-muted);
+        }
+
+        input[type="file"] {
+            font-size: 13px;
+        }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover { background-color: var(--primary-hover); }
+        button:disabled { background-color: #93c5fd; cursor: not-allowed; }
+
+        .spacer { flex-grow: 1; }
+
+        .nav-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #counter {
+            font-weight: 600;
+            font-size: 14px;
+            min-width: 100px;
+            text-align: center;
+        }
+
+        #exportBtn {
+            background-color: #059669; /* Green for export */
+        }
+        #exportBtn:hover { background-color: #047857; }
+
+        /* --- Workspace (Split Layout) --- */
+        .workspace {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 65px);
+            overflow: hidden;
+        }
+
+        /* Panels */
+        .panel {
+            background-color: var(--panel-bg);
+            display: flex;
+            flex-direction: column;
+            min-width: 20%;
+        }
+
+        #leftPanel {
+            width: 40%; /* Default width */
+            border-right: 1px solid var(--border-color);
+        }
+
+        #rightPanel {
+            flex: 1; /* Takes remaining space */
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Resizer */
+        .resizer {
+            width: 6px;
+            background-color: var(--border-color);
+            cursor: col-resize;
+            transition: background-color 0.2s;
+            z-index: 5;
+        }
+        .resizer:hover, .resizer:active {
+            background-color: var(--primary);
+        }
+
+        /* Editor */
+        textarea {
+            width: 100%;
+            height: 100%;
+            resize: none;
+            padding: 15px;
+            border: none;
+            font-family: "Consolas", "Courier New", monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            outline: none;
+            background-color: #fafafa;
+        }
+
+        textarea:focus { background-color: #ffffff; }
+
+        /* Image Viewer */
+        .img-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #e5e7eb;
+            cursor: grab;
+            position: relative;
+        }
+
+        .img-container:active { cursor: grabbing; }
+
+        #prescriptionImage {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            transform-origin: center center;
+            transition: transform 0.05s linear;
+            pointer-events: none; /* Let container handle drag */
+        }
+        
+        .image-hint {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+        }
+
+        /* Hidden class */
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <!-- Controls -->
+    <div class="controls">
+        <div class="input-group">
+            <label>1. Select Ground Truth (.txt)</label>
+            <input type="file" id="txtInput" accept=".txt">
+        </div>
+        <div class="input-group">
+            <label>2. Select Image Folder</label>
+            <input type="file" id="folderInput" webkitdirectory directory multiple>
+        </div>
+        
+        <button id="displayBtn">Display / Start</button>
+
+        <div class="spacer"></div>
+
+        <div class="nav-controls hidden" id="navControls">
+            <button id="prevBtn" title="Shortcut: Alt + Left Arrow">&larr; Prev</button>
+            <span id="counter">0 / 0</span>
+            <button id="nextBtn" title="Shortcut: Alt + Right Arrow">Next &rarr;</button>
+            <button id="exportBtn" title="Shortcut: Alt + S">Export Corrected .txt</button>
+        </div>
+    </div>
+
+    <!-- Workspace -->
+    <div class="workspace">
+        <!-- Left Panel: Text Editor -->
+        <div class="panel" id="leftPanel">
+            <textarea id="textEditor" placeholder="Transcription and JSON will appear here..." disabled></textarea>
+        </div>
+
+        <!-- Splitter -->
+        <div class="resizer" id="resizer"></div>
+
+        <!-- Right Panel: Image Viewer -->
+        <div class="panel" id="rightPanel">
+            <div class="img-container" id="imgContainer">
+                <img id="prescriptionImage" src="" alt="No image loaded">
+                <div class="image-hint">Scroll to Zoom | Drag to Pan</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- State Variables ---
+        let entries = [];
+        let imageMap = {};
+        let currentIndex = 0;
+
+        // --- DOM Elements ---
+        const txtInput = document.getElementById('txtInput');
+        const folderInput = document.getElementById('folderInput');
+        const displayBtn = document.getElementById('displayBtn');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const navControls = document.getElementById('navControls');
+        const counter = document.getElementById('counter');
+        const textEditor = document.getElementById('textEditor');
+        const prescriptionImage = document.getElementById('prescriptionImage');
+        
+        // --- Resizer DOM ---
+        const resizer = document.getElementById('resizer');
+        const leftPanel = document.getElementById('leftPanel');
+        const workspace = document.querySelector('.workspace');
+
+        // --- Initialization & Data Parsing ---
+        displayBtn.addEventListener('click', async () => {
+            if (!txtInput.files.length) return alert("Please select a .txt file.");
+            if (!folderInput.files.length) return alert("Please select an image folder.");
+
+            // 1. Process Images
+            imageMap = {};
+            for (let file of folderInput.files) {
+                // Allows matching directly with filenames like 01142.jpg
+                imageMap[file.name] = URL.createObjectURL(file);
+            }
+
+            // 2. Process Text File
+            const file = txtInput.files[0];
+            const text = await file.text();
+            
+            // Regex to match ###IMAGE: <filename> \n <content> \n ###ENDIMAGE
+            const regex = /###IMAGE:\s*(.*?)\n([\s\S]*?)###ENDIMAGE/g;
+            entries = [];
+            let match;
+            
+            while ((match = regex.exec(text)) !== null) {
+                entries.push({
+                    filename: match[1].trim(),
+                    content: match[2] // Preserve all internal spacing/newlines
+                });
+            }
+
+            if (entries.length === 0) {
+                alert("No valid entries found. Please check if the .txt format matches the specifications.");
+                return;
+            }
+
+            // Setup UI for editing
+            navControls.classList.remove('hidden');
+            textEditor.disabled = false;
+            currentIndex = 0;
+            showEntry(currentIndex);
+        });
+
+        // --- Core Functions ---
+        function showEntry(index) {
+            if (index < 0 || index >= entries.length) return;
+            
+            currentIndex = index;
+            const entry = entries[index];
+
+            // Load text
+            textEditor.value = entry.content.replace(/^\n/, ''); // Trim leading newline if present
+            
+            // Load image
+            if (imageMap[entry.filename]) {
+                prescriptionImage.src = imageMap[entry.filename];
+                prescriptionImage.alt = entry.filename;
+            } else {
+                prescriptionImage.src = '';
+                prescriptionImage.alt = `Image missing: ${entry.filename}`;
+            }
+
+            // Update UI state
+            counter.innerText = `${index + 1} / ${entries.length}`;
+            prevBtn.disabled = index === 0;
+            nextBtn.disabled = index === entries.length - 1;
+            
+            resetZoom();
+        }
+
+        // Auto-save typing into memory array
+        textEditor.addEventListener('input', (e) => {
+            if (entries[currentIndex]) {
+                entries[currentIndex].content = e.target.value;
+            }
+        });
+
+        // --- Navigation ---
+        prevBtn.addEventListener('click', () => showEntry(currentIndex - 1));
+        nextBtn.addEventListener('click', () => showEntry(currentIndex + 1));
+
+        // --- Export Logic ---
+        exportBtn.addEventListener('click', () => {
+            if(entries.length === 0) return;
+            
+            let outputString = "";
+            entries.forEach(entry => {
+                // Format back to exactly how it was
+                outputString += `###IMAGE: ${entry.filename}\n`;
+                outputString += `${entry.content}`;
+                if (!entry.content.endsWith('\n')) outputString += '\n'; // Ensure newline before end tag
+                outputString += `###ENDIMAGE\n\n`;
+            });
+
+            const blob = new Blob([outputString.trim()], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `corrected_${txtInput.files[0].name}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        // --- Keyboard Shortcuts ---
+        document.addEventListener('keydown', (e) => {
+            if (entries.length === 0) return;
+            
+            // Alt + Right Arrow (Next)
+            if (e.altKey && e.key === 'ArrowRight') {
+                e.preventDefault();
+                if (currentIndex < entries.length - 1) showEntry(currentIndex + 1);
+            }
+            // Alt + Left Arrow (Prev)
+            if (e.altKey && e.key === 'ArrowLeft') {
+                e.preventDefault();
+                if (currentIndex > 0) showEntry(currentIndex - 1);
+            }
+            // Alt + S (Save/Export)
+            if (e.altKey && (e.key === 's' || e.key === 'S')) {
+                e.preventDefault();
+                exportBtn.click();
+            }
+        });
+
+        // --- Splitter (Resizer) Logic ---
+        let isResizing = false;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.style.cursor = 'col-resize';
+            // Prevent iframe/image selection while dragging
+            e.preventDefault(); 
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const workspaceRect = workspace.getBoundingClientRect();
+            // Calculate new width percentage
+            let newWidthPercent = ((e.clientX - workspaceRect.left) / workspaceRect.width) * 100;
+            // Constrain between 20% and 80% to prevent collapsing panels completely
+            newWidthPercent = Math.max(20, Math.min(newWidthPercent, 80));
+            leftPanel.style.width = `${newWidthPercent}%`;
+            leftPanel.style.flex = 'none'; // Override flex-grow
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = 'default';
+            }
+        });
+
+        // --- Image Pan and Zoom Logic ---
+        const imgContainer = document.getElementById('imgContainer');
+        let scale = 1;
+        let translateX = 0, translateY = 0;
+        let isDragging = false;
+        let startX, startY;
+
+        function applyTransform() {
+            prescriptionImage.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+        }
+
+        function resetZoom() {
+            scale = 1;
+            translateX = 0;
+            translateY = 0;
+            applyTransform();
+        }
+
+        // Zoom (Wheel)
+        imgContainer.addEventListener('wheel', (e) => {
+            if (!prescriptionImage.src) return;
+            e.preventDefault(); // Prevent page scroll
+            const zoomSpeed = 0.15;
+            const delta = e.deltaY < 0 ? 1 : -1;
+            scale += delta * zoomSpeed;
+            scale = Math.max(0.5, Math.min(scale, 10)); // Min 0.5x, Max 10x
+            applyTransform();
+        });
+
+        // Pan (Drag)
+        imgContainer.addEventListener('mousedown', (e) => {
+            if (!prescriptionImage.src || e.button !== 0) return; // Only left click
+            isDragging = true;
+            startX = e.clientX - translateX;
+            startY = e.clientY - translateY;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            translateX = e.clientX - startX;
+            translateY = e.clientY - startY;
+            applyTransform();
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+        
+    </script>
+</body>
+</html>
