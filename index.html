@@ -5,7 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OCR Ground Truth Corrector</title>
     <style>
-        /* --- CSS Variables & Theming --- */
+        /* --- CSS Variables & Theming ---
+           Light-mode values live on :root. Dark-mode values live under
+           [data-theme="dark"] below and simply override the same variable
+           names. The JS never touches individual colors directly — it only
+           sets/removes the `data-theme="dark"` attribute on <html>, and the
+           cascade takes care of the rest. See the "Dark Mode Logic" block
+           near the bottom of the script for how/when that attribute gets set. */
         :root {
             --bg-color: #f4f4f5;
             --panel-bg: #ffffff;
@@ -56,7 +62,14 @@
             z-index: 10;
         }
 
-        /* Fullscreen & Manual Auto-Hide Logic */
+        /* Fullscreen & Manual Auto-Hide Logic
+           Two independent triggers share the same hide/reveal behavior:
+             - `.is-fullscreen` is toggled automatically via the
+               `fullscreenchange` event (e.g. pressing F11).
+             - `.auto-hide` is toggled manually via the eye icon button.
+           In both cases the top bar slides up out of view (translateY(-100%))
+           and slides back down on hover/focus, so the user can still reach
+           the controls without permanently giving up screen space. */
         body.is-fullscreen .controls,
         body.auto-hide .controls {
             position: absolute;
@@ -68,6 +81,10 @@
         body.auto-hide .controls:hover, body.auto-hide .controls:focus-within {
             transform: translateY(0);
         }
+        /* Invisible 20px "catch" strip glued to the bottom of the hidden bar.
+           Without this, moving the mouse in a straight line toward the very
+           top edge of the screen can slip past the thin sliver of the
+           bar that's still peeking out and never trigger :hover. */
         body.is-fullscreen .controls::after,
         body.auto-hide .controls::after {
             content: '';
@@ -118,7 +135,12 @@
         #leftPanel { width: 40%; border-right: 1px solid var(--border-color); }
         #rightPanel { flex: 1; position: relative; overflow: hidden; }
 
-        /* Swap State (Flex Order) */
+        /* Swap State (Flex Order)
+           #leftPanel (text editor) and #rightPanel (image) are just reordered
+           visually via flex `order` — the underlying DOM/element IDs never
+           change. This is why the resizer math in JS has to branch on
+           `isSwapped` to know which physical edge of the screen it's
+           measuring from. */
         .workspace.swapped #leftPanel { order: 3; border-right: none; border-left: 1px solid var(--border-color); }
         .workspace.swapped #resizer { order: 2; }
         .workspace.swapped #rightPanel { order: 1; }
@@ -154,18 +176,29 @@
 </head>
 <body>
 
+    <!-- Top control bar: file pickers, Start button, auto-hide toggle, theme
+         switch, and (once data is loaded) the prev/next/export nav group.
+         This whole bar can be hidden via .auto-hide / .is-fullscreen (see CSS). -->
     <div class="controls">
+        <!-- Step 1: the ground-truth .txt file containing all
+             ###IMAGE ... ###ENDIMAGE blocks (transcription + JSON per image). -->
         <div class="input-group">
             <label>1. Select Ground Truth (.txt)</label>
             <input type="file" id="txtInput" accept=".txt">
         </div>
+        <!-- Step 2: the folder of prescription images. webkitdirectory lets the
+             user pick an entire folder instead of individual files; every file
+             inside (recursively) shows up in folderInput.files. -->
         <div class="input-group">
             <label>2. Select Image Folder</label>
             <input type="file" id="folderInput" webkitdirectory directory multiple>
         </div>
         
+        <!-- Parses the .txt + builds the image lookup map; see displayBtn handler below -->
         <button id="displayBtn">Start</button>
 
+        <!-- Eye icon: manually hides the top bar to maximize working space.
+             Icon swaps between open/closed eye paths in JS on click. -->
         <button id="autoHideToggle" class="icon-btn" title="Toggle Auto-Hide Panel">
             <svg id="eyeIcon" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -173,6 +206,9 @@
             </svg>
         </button>
 
+        <!-- Dark mode switch. Checked state is initialized in JS from either a
+             saved user preference (localStorage) or the OS-level
+             prefers-color-scheme setting — see "Dark Mode Logic" below. -->
         <label class="theme-switch" title="Toggle Dark Mode">
             <input type="checkbox" id="themeToggle">
             <span class="slider"></span>
@@ -180,6 +216,7 @@
 
         <div class="spacer"></div>
 
+        <!-- Hidden until the first successful "Start" parse; see displayBtn handler -->
         <div class="nav-controls hidden" id="navControls">
             <button id="prevBtn" title="Shortcut: Alt + Left Arrow">&larr; Prev</button>
             <span id="counter">0 / 0</span>
@@ -188,15 +225,21 @@
         </div>
     </div>
 
+    <!-- Main split-pane workspace: raw text on one side, image on the other.
+         Which side is which is controlled by the .swapped class (see CSS) —
+         the DOM order below is always the same (leftPanel = text). -->
     <div class="workspace" id="workspace">
+        <!-- Editable transcription + JSON for the current entry -->
         <div class="panel" id="leftPanel">
             <textarea id="textEditor" placeholder="Transcription and JSON will appear here..." disabled></textarea>
         </div>
         
+        <!-- Drag handle between panels; also hosts the swap button -->
         <div class="resizer" id="resizer">
             <div class="swap-btn" id="swapBtn" title="Swap Panels">&#8644;</div>
         </div>
         
+        <!-- Reference image for the current entry, with pan/zoom support -->
         <div class="panel" id="rightPanel">
             <div class="img-container" id="imgContainer">
                 <img id="prescriptionImage" src="" alt="No image loaded">
@@ -207,10 +250,11 @@
 
     <script>
         // --- State Variables & Elements ---
-        let entries = [];
-        let imageMap = {};
-        let currentIndex = 0;
-        let isSwapped = false;
+        let entries = [];       // Parsed { filename, content } objects, one per ###IMAGE block
+        let imageMap = {};      // filename -> blob: URL, built from the selected folder
+        let currentIndex = 0;   // Index into `entries` currently shown in the editor/image panes
+        let isSwapped = false;  // Whether the text/image panels have been visually swapped
+        let hasUnsavedChanges = false; // True once the user edits text without exporting yet
 
         const txtInput = document.getElementById('txtInput');
         const folderInput = document.getElementById('folderInput');
@@ -232,9 +276,45 @@
         const swapBtn = document.getElementById('swapBtn');
 
         // --- Dark Mode Logic ---
-        themeToggle.addEventListener('change', (e) => {
-            if (e.target.checked) document.documentElement.setAttribute('data-theme', 'dark');
+        // Priority order for the initial theme:
+        //   1. A theme the user explicitly chose before (saved in localStorage)
+        //   2. Otherwise, whatever the OS/browser currently reports via
+        //      the `prefers-color-scheme` media query
+        // After that, flipping the switch always wins and is remembered,
+        // but as long as the user has never chosen manually, the page keeps
+        // following the OS setting live (e.g. if the OS switches to dark
+        // mode at sunset while this tab is open in the background).
+        const THEME_STORAGE_KEY = 'ocrCorrector.theme'; // 'light' | 'dark'
+        const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+        function applyTheme(isDark) {
+            if (isDark) document.documentElement.setAttribute('data-theme', 'dark');
             else document.documentElement.removeAttribute('data-theme');
+            themeToggle.checked = isDark;
+        }
+
+        function initTheme() {
+            const saved = localStorage.getItem(THEME_STORAGE_KEY);
+            if (saved === 'dark' || saved === 'light') {
+                applyTheme(saved === 'dark');
+            } else {
+                applyTheme(darkModeQuery.matches);
+            }
+        }
+        initTheme();
+
+        // Manual toggle: always an explicit user choice from here on, so persist it.
+        themeToggle.addEventListener('change', (e) => {
+            applyTheme(e.target.checked);
+            localStorage.setItem(THEME_STORAGE_KEY, e.target.checked ? 'dark' : 'light');
+        });
+
+        // Live OS theme changes: only auto-follow if the user hasn't manually
+        // overridden the theme in this browser before.
+        darkModeQuery.addEventListener('change', (e) => {
+            if (localStorage.getItem(THEME_STORAGE_KEY) === null) {
+                applyTheme(e.matches);
+            }
         });
 
         // --- Auto-Hide Panel Logic ---
@@ -250,17 +330,42 @@
         });
 
         // --- Panel Swap Logic ---
+        // Purely visual: toggles the .swapped class (see CSS flex `order` rules)
+        // and flips the flag the resizer's mousemove math relies on.
         swapBtn.addEventListener('click', (e) => {
             e.stopPropagation(); // Prevents triggering the resizer
             isSwapped = !isSwapped;
             workspace.classList.toggle('swapped');
         });
 
+        // Revokes every blob: URL currently in imageMap. Object URLs are not
+        // garbage-collected automatically — each createObjectURL() call pins
+        // the underlying file data in memory until explicitly revoked. With a
+        // few hundred prescription images, reloading a folder without this
+        // would silently leak every previous image's data for the rest of
+        // the browser session.
+        function revokeImageMap() {
+            for (const url of Object.values(imageMap)) URL.revokeObjectURL(url);
+        }
+
         // --- Data Parsing ---
         displayBtn.addEventListener('click', async () => {
             if (!txtInput.files.length) return alert("Please select a .txt file.");
             if (!folderInput.files.length) return alert("Please select an image folder.");
 
+            // Guard against silently discarding in-progress corrections if the
+            // user (re-)clicks Start after already editing some entries.
+            if (hasUnsavedChanges) {
+                const proceed = confirm(
+                    "You have unsaved edits in the current session. " +
+                    "Loading new data will discard them (make sure you've clicked Export first). " +
+                    "Continue anyway?"
+                );
+                if (!proceed) return;
+            }
+
+            // Release any object URLs from a previous load before building a new map
+            revokeImageMap();
             imageMap = {};
             for (let file of folderInput.files) imageMap[file.name] = URL.createObjectURL(file);
 
@@ -268,6 +373,12 @@
             let text = await file.text();
             text = text.replace(/\r\n?/g, '\n'); 
             
+            // Each ground-truth entry looks like:
+            //   ###IMAGE: 0001.jpg
+            //   TRANSCRIPTION: ...
+            //   JSON: { ... }
+            //   ###ENDIMAGE
+            // The filename becomes the key used to look up the matching image in imageMap.
             const regex = /###IMAGE:\s*(.*?)\s*\n([\s\S]*?)###ENDIMAGE/g;
             entries = [];
             let match;
@@ -281,9 +392,12 @@
             navControls.classList.remove('hidden');
             textEditor.disabled = false;
             currentIndex = 0;
+            hasUnsavedChanges = false;
             showEntry(currentIndex);
         });
 
+        // Renders the entry at `index` into the text editor and image pane,
+        // and updates the counter/nav button disabled states accordingly.
         function showEntry(index) {
             if (index < 0 || index >= entries.length) return;
             currentIndex = index;
@@ -294,6 +408,9 @@
                 prescriptionImage.src = imageMap[entry.filename];
                 prescriptionImage.alt = entry.filename;
             } else {
+                // Filename in the .txt didn't match any file in the selected
+                // folder — flagged visually via the alt text / broken image
+                // rather than failing silently.
                 prescriptionImage.src = '';
                 prescriptionImage.alt = `Image missing: ${entry.filename}`;
             }
@@ -301,16 +418,21 @@
             counter.innerText = `${index + 1} / ${entries.length}`;
             prevBtn.disabled = index === 0;
             nextBtn.disabled = index === entries.length - 1;
-            resetZoom();
+            resetZoom(); // Each new image starts at 1x zoom, no pan offset
         }
 
+        // Keeps the in-memory entries array in sync with every keystroke, so
+        // switching entries (or exporting) always reflects the latest edits.
         textEditor.addEventListener('input', (e) => {
             if (entries[currentIndex]) entries[currentIndex].content = e.target.value;
+            hasUnsavedChanges = true;
         });
 
         prevBtn.addEventListener('click', () => showEntry(currentIndex - 1));
         nextBtn.addEventListener('click', () => showEntry(currentIndex + 1));
 
+        // Reassembles all entries back into the original ###IMAGE/###ENDIMAGE
+        // text format and triggers a browser download of the corrected file.
         exportBtn.addEventListener('click', () => {
             if(entries.length === 0) return;
             let outputString = "";
@@ -327,9 +449,13 @@
             a.href = url; a.download = `corrected_${txtInput.files[0].name}`;
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             URL.revokeObjectURL(url);
+            hasUnsavedChanges = false;
         });
 
         // --- Keyboard Shortcuts & F11 ---
+        // Note: some browsers reserve F11 for native fullscreen and won't let
+        // JS intercept it; requestFullscreen() here is a best-effort fallback
+        // for browsers that do allow it.
         document.addEventListener('keydown', (e) => {
             if (e.key === 'F11') {
                 e.preventDefault();
@@ -338,17 +464,26 @@
             }
             
             if (entries.length === 0) return;
+            // Alt+Arrow / Alt+S chosen deliberately since they rarely collide
+            // with default text-editing shortcuts inside the textarea.
             if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); if (currentIndex < entries.length - 1) showEntry(currentIndex + 1); }
             if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); if (currentIndex > 0) showEntry(currentIndex - 1); }
             if (e.altKey && (e.key === 's' || e.key === 'S')) { e.preventDefault(); exportBtn.click(); }
         });
 
+        // Keeps .is-fullscreen in sync even when fullscreen is exited via
+        // browser UI/Esc rather than the F11 handler above (e.g. user presses
+        // Esc, or the browser itself exits fullscreen).
         document.addEventListener('fullscreenchange', () => {
             if (document.fullscreenElement) document.body.classList.add('is-fullscreen');
             else document.body.classList.remove('is-fullscreen');
         });
 
         // --- Splitter Logic (with mathematical inversion for Swapped state) ---
+        // leftPanel is always the text editor in the DOM, but visually it can
+        // be on the left OR right (via .swapped). The width % is measured
+        // from whichever edge leftPanel is actually rendered on, so dragging
+        // always feels like dragging the visible boundary, not the DOM edge.
         let isResizing = false;
         resizer.addEventListener('mousedown', (e) => {
             if (e.target === swapBtn) return; // Don't trigger resize when clicking swap
@@ -366,29 +501,36 @@
                 newWidthPercent = ((workspaceRect.right - e.clientX) / workspaceRect.width) * 100;
             }
             
-            newWidthPercent = Math.max(20, Math.min(newWidthPercent, 80));
+            newWidthPercent = Math.max(20, Math.min(newWidthPercent, 80)); // Keep both panels usable
             leftPanel.style.width = `${newWidthPercent}%`;
-            leftPanel.style.flex = 'none'; 
+            leftPanel.style.flex = 'none'; // Override the default flex sizing once manually resized
         });
         document.addEventListener('mouseup', () => {
             if (isResizing) { isResizing = false; document.body.style.cursor = 'default'; }
         });
 
         // --- Image Pan & Zoom ---
+        // Simple CSS-transform based viewer: scale = zoom level,
+        // translateX/Y = pan offset in pixels. Both reset to defaults
+        // whenever a new entry is shown (see resetZoom() call in showEntry).
         const imgContainer = document.getElementById('imgContainer');
         let scale = 1, translateX = 0, translateY = 0, isDragging = false, startX, startY;
 
         function applyTransform() { prescriptionImage.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`; }
         function resetZoom() { scale = 1; translateX = 0; translateY = 0; applyTransform(); }
 
+        // Mouse wheel zooms in/out around the image's transform-origin (center).
         imgContainer.addEventListener('wheel', (e) => {
             if (!prescriptionImage.src) return;
             e.preventDefault(); 
             scale += (e.deltaY < 0 ? 1 : -1) * 0.15;
-            scale = Math.max(0.5, Math.min(scale, 10)); 
+            scale = Math.max(0.5, Math.min(scale, 10)); // Clamp zoom between 0.5x and 10x
             applyTransform();
         });
 
+        // Click-and-drag panning. Listens on `window` (not just the
+        // container) for mousemove/mouseup so a fast drag that leaves the
+        // container's bounds doesn't get "stuck" in a dragging state.
         imgContainer.addEventListener('mousedown', (e) => {
             if (!prescriptionImage.src || e.button !== 0) return; 
             isDragging = true; startX = e.clientX - translateX; startY = e.clientY - translateY;
