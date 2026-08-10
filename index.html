@@ -339,7 +339,7 @@
     <!-- Main split-pane workspace: raw text on one side, image on the other.
          Which side is which is controlled by the .swapped class (see CSS) —
          the DOM order below is always the same (leftPanel = text). -->
-    <div class="workspace" id="workspace">
+    <div class="workspace swapped" id="workspace">
         <!-- Editable transcription + JSON for the current entry, plus a
              below-the-fold strip of fuzzy medicine-name suggestions that
              only appears while the suggestion toggle is on. -->
@@ -377,7 +377,7 @@
         let entries = [];       // Parsed { filename, content } objects, one per ###IMAGE block
         let imageMap = {};      // filename -> blob: URL, built from the selected folder
         let currentIndex = 0;   // Index into `entries` currently shown in the editor/image panes
-        let isSwapped = false;  // Whether the text/image panels have been visually swapped
+        let isSwapped = true;  // Whether the text/image panels have been visually swapped
         let hasUnsavedChanges = false; // True once the user edits text without exporting yet
 
         const txtInput = document.getElementById('txtInput');
