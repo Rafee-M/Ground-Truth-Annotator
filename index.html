@@ -167,8 +167,10 @@
 
         /* --- Medicine Name Suggestion Bar (below the text editor) ---
            Only takes up space when it actually has chips to show; see
-           .hidden usage in JS. Horizontally scrollable so 4 longer names
-           never overflow the panel width. */
+           .hidden usage in JS. The chip count isn't capped — every match
+           above the score cutoff gets a chip (see computeSuggestions) — so
+           this row never wraps (flex, no wrap) and instead scrolls
+           horizontally, however many chips come back. */
         .suggest-bar { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border-color); overflow-x: auto; flex: 0 0 auto; }
         .suggest-chip {
             flex: 0 0 auto; max-width: 220px; padding: 6px 10px; font-size: 12px;
@@ -482,6 +484,17 @@
 
         let medicines = [];          // Flat array of { brand_name, dosage_form, strength, slug, _nameLower }
         let medicinesByLetter = new Map(); // lowercase first char -> array of `medicines` entries (cheap prefilter bucket)
+        // The same dataset, but collapsed to one entry per unique brand name
+        // (case-insensitive). The same brand often repeats across several
+        // dosage_form/strength rows ("Celofen 100mg Tablet", "Celofen 200mg
+        // Tablet", ...); the search bar wants every one of those rows (so the
+        // dosage info is visible), but the inline suggestion chips only ever
+        // insert a name into the text, so showing the same name 3-4 times
+        // over is pure noise there. Kept as a separate index rather than
+        // deduping on the fly so it's computed once per data load, not once
+        // per keystroke.
+        let uniqueMedicines = [];
+        let uniqueMedicinesByLetter = new Map();
         let medicinesReady = false;
         let suggestionsEnabled = localStorage.getItem(SUGGEST_ENABLED_KEY) === 'true';
 
@@ -496,11 +509,21 @@
                 .map(m => ({ ...m, _nameLower: m.brand_name.toLowerCase() }));
 
             medicinesByLetter = new Map();
+            uniqueMedicines = [];
+            uniqueMedicinesByLetter = new Map();
+            const seenNames = new Set();
             for (const med of medicines) {
                 const letter = med._nameLower[0];
                 if (!letter) continue;
                 if (!medicinesByLetter.has(letter)) medicinesByLetter.set(letter, []);
                 medicinesByLetter.get(letter).push(med);
+
+                if (!seenNames.has(med._nameLower)) {
+                    seenNames.add(med._nameLower);
+                    uniqueMedicines.push(med);
+                    if (!uniqueMedicinesByLetter.has(letter)) uniqueMedicinesByLetter.set(letter, []);
+                    uniqueMedicinesByLetter.get(letter).push(med);
+                }
             }
             medicinesReady = medicines.length > 0;
         }
@@ -570,27 +593,48 @@
         }
 
         // --- 2.1: Search bar ---
-        // Algorithm: a single linear pass over `medicines`, bucketed into
-        // "name starts with query" vs "name contains query elsewhere", each
-        // sorted with shorter (closer) names first. A plain scan is plenty
-        // fast at this dataset's scale (tens of thousands of short strings
-        // scans in low single-digit milliseconds), so a prefix-trie or
-        // similar index isn't worth the added complexity here — the early
-        // MAX_SCAN cutoff below just keeps the worst case bounded if the
-        // dataset ever grows substantially.
+        // Algorithm: bucketed into "name starts with query" vs "name
+        // contains query elsewhere", each sorted with shorter (closer) names
+        // first.
+        //
+        // IMPORTANT: an earlier version of this function capped its scan at
+        // the first `MAX_SCAN` (8000) entries of `medicines` as a defensive
+        // upper bound. With the real dataset (thousands of entries) that cap
+        // meant anything sitting after index 8000 was structurally
+        // unreachable by search, no matter what was typed — the query never
+        // even got a chance to compare against it. That's fixed here by
+        // always scanning the *entire* dataset; there's no artificial cutoff
+        // left, so correctness no longer depends on how large the dataset
+        // grows.
+        //
+        // To keep that full scan fast rather than just correct: the
+        // "startsWith" bucket only has to hold entries whose first character
+        // matches the query's first character (a name can't start with the
+        // query otherwise), so it uses the pre-built `medicinesByLetter`
+        // bucket instead of walking every entry. Only the "contains" bucket
+        // (a match anywhere in the name) genuinely needs a pass over the
+        // full list, since that match could start at any position. Even a
+        // full linear scan of tens of thousands of short strings runs in
+        // low single-digit milliseconds in modern JS engines, so this stays
+        // comfortably fast without needing a trie or similar index.
         const MAX_SEARCH_RESULTS = 20;
-        const MAX_SCAN = 8000;
 
         function searchMedicines(query) {
             const q = query.trim().toLowerCase();
             if (!q) return [];
+
             const startsWith = [];
-            const contains = [];
-            for (let i = 0; i < medicines.length && i < MAX_SCAN; i++) {
-                const idx = medicines[i]._nameLower.indexOf(q);
-                if (idx === 0) startsWith.push(medicines[i]);
-                else if (idx > 0) contains.push(medicines[i]);
+            const firstLetterBucket = medicinesByLetter.get(q[0]) || [];
+            for (const med of firstLetterBucket) {
+                if (med._nameLower.startsWith(q)) startsWith.push(med);
             }
+
+            const contains = [];
+            for (const med of medicines) {
+                const idx = med._nameLower.indexOf(q);
+                if (idx > 0) contains.push(med);
+            }
+
             startsWith.sort((a, b) => a.brand_name.length - b.brand_name.length);
             contains.sort((a, b) => a.brand_name.length - b.brand_name.length);
             return startsWith.concat(contains).slice(0, MAX_SEARCH_RESULTS);
@@ -672,7 +716,6 @@
         }
 
         const MIN_SUGGEST_LEN = 2;
-        const SUGGEST_LIMIT = 4;
         // 70 was chosen empirically (see testing notes): WRatio leans on
         // partial_ratio internally, which can score short queries ~65-70
         // against a completely unrelated longer name just because some
@@ -688,10 +731,17 @@
             // scorer. This trades typo-tolerance on the very first character
             // for a large reduction in comparisons on bigger datasets — a
             // standard "candidate generation, then score" pattern. Falls
-            // back to the full list if that bucket is too small to be useful.
+            // back to the full (deduped) list if that bucket is too small to
+            // be useful.
+            //
+            // Uses the *unique*-by-name index rather than `medicines`/
+            // `medicinesByLetter`: those still contain one row per
+            // dosage_form/strength variant of the same brand, which is
+            // exactly what a search-result listing wants but is pure
+            // repetition in a suggestion chip that only ever inserts a name.
             const letter = word[0].toLowerCase();
-            let candidates = medicinesByLetter.get(letter) || [];
-            if (candidates.length < 20) candidates = medicines;
+            let candidates = uniqueMedicinesByLetter.get(letter) || [];
+            if (candidates.length < 20) candidates = uniqueMedicines;
 
             const choices = candidates.map(m => m.brand_name);
             // WRatio is fuzzball's "just give me the best overall similarity"
@@ -699,9 +749,18 @@
             // blends plain, partial, and token-based ratios, which handles
             // both partial prefixes ("Bet" -> "Betaloc") and word-order
             // variance reasonably well without having to hand-pick a scorer.
+            //
+            // No `limit` is passed here: fuzzball only honors a numeric
+            // limit as "top N", and any fixed N can silently bump a real
+            // match (e.g. typing "Fexoma" not showing "Fexona") off the end
+            // once N other candidates happen to score marginally higher.
+            // Per fuzzball's docs, omitting `limit` returns every candidate
+            // that clears `cutoff`, still sorted best-first — the score
+            // threshold does the filtering instead of an arbitrary count, and
+            // the chip bar (already `overflow-x: auto`, non-wrapping) scrolls
+            // horizontally to hold however many come back.
             const results = fuzzball.extract(word, choices, {
                 scorer: fuzzball.WRatio,
-                limit: SUGGEST_LIMIT,
                 cutoff: SUGGEST_CUTOFF,
             });
             // fuzzball.extract returns [choiceString, score, index] triples;
