@@ -113,6 +113,11 @@
         }
         .icon-btn:hover { background: var(--bg-color); }
         .icon-btn svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; }
+        /* "Active"/enabled state for toggle-style icon buttons (auto-hide, suggestions).
+           Filled background instead of an icon swap, since the suggestion toggle's
+           icon doesn't have a natural "on/off" pictogram pair the way the eye does. */
+        .icon-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+        .icon-btn.active:hover { background: var(--primary-hover); }
 
         /* Dark Mode Toggle Slider */
         .theme-switch { position: relative; display: inline-block; width: 36px; height: 18px; margin-left: 2px; }
@@ -127,6 +132,51 @@
         #counter { font-weight: 600; font-size: 13px; min-width: 80px; text-align: center; }
         #exportBtn { background-color: #059669; }
         #exportBtn:hover { background-color: #047857; }
+
+        /* --- Medicine Search Bar (centered in the top control bar) ---
+           Sits between the two .spacer elements added around it, which is
+           what keeps it visually centered regardless of how wide the left
+           (file pickers/toggles) and right (nav controls) groups end up
+           being — a common flexbox "centered toolbar" trick. */
+        .med-search { position: relative; width: min(380px, 100%); flex: 0 1 380px; }
+        #medSearchInput {
+            width: 100%; padding: 6px 10px; font-size: 13px;
+            border: 1px solid var(--border-color); border-radius: 6px;
+            background-color: var(--text-bg); color: var(--text-main); outline: none;
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+        #medSearchInput:focus { border-color: var(--primary); background-color: var(--text-bg-focus); }
+        #medSearchInput::placeholder { color: var(--text-muted); }
+
+        .med-search-results {
+            position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+            background-color: var(--panel-bg); border: 1px solid var(--border-color);
+            border-radius: 8px; box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+            max-height: 320px; overflow-y: auto; z-index: 30;
+        }
+        .med-result-item { padding: 8px 12px; cursor: default; border-bottom: 1px solid var(--border-color); }
+        .med-result-item:last-child { border-bottom: none; }
+        .med-result-item:hover { background-color: var(--bg-color); }
+        .med-result-name { font-weight: 600; font-size: 13px; }
+        .med-result-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .med-search-status { padding: 10px 12px; font-size: 12px; color: var(--text-muted); }
+
+        /* Shared highlight style for matched substrings, used by both the
+           search dropdown and the suggestion chips below the text editor. */
+        mark { background-color: rgba(59, 130, 246, 0.35); color: inherit; border-radius: 2px; padding: 0 1px; }
+
+        /* --- Medicine Name Suggestion Bar (below the text editor) ---
+           Only takes up space when it actually has chips to show; see
+           .hidden usage in JS. Horizontally scrollable so 4 longer names
+           never overflow the panel width. */
+        .suggest-bar { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border-color); overflow-x: auto; flex: 0 0 auto; }
+        .suggest-chip {
+            flex: 0 0 auto; max-width: 220px; padding: 6px 10px; font-size: 12px;
+            background-color: var(--text-bg); color: var(--text-main);
+            border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .suggest-chip:hover { border-color: var(--primary); background-color: var(--bg-color); }
 
         /* --- Workspace --- */
         .workspace { display: flex; flex: 1; min-height: 0; overflow: hidden; }
@@ -161,8 +211,33 @@
         }
         .swap-btn:hover { background-color: var(--bg-color); color: var(--primary); }
 
-        textarea { width: 100%; height: 100%; resize: none; padding: 15px; border: none; font-family: "Consolas", "Courier New", monospace; font-size: 14px; line-height: 1.5; outline: none; background-color: var(--text-bg); color: var(--text-main); }
-        textarea:focus { background-color: var(--text-bg-focus); }
+        /* --- Editor + Highlight Overlay ---
+           A plain <textarea> can't render inline highlighted spans, so we
+           fake it: a same-sized, invisible-text <div> sits directly behind
+           the (now transparent-background) textarea. Its <mark> elements
+           supply colored backgrounds; the textarea's real glyphs render on
+           top of them. Both share identical font metrics/padding so
+           characters line up exactly — see renderHighlightOverlay() in the
+           script for how it's populated, and the scroll-sync listener that
+           keeps them aligned while scrolling. Only used for the drug-name
+           link feature; with that toggle off the overlay just carries
+           invisible text and is indistinguishable from not being there. */
+        .editor-wrap { position: relative; flex: 1; min-height: 0; background-color: var(--text-bg); transition: background-color 0.15s; }
+        .editor-wrap:focus-within { background-color: var(--text-bg-focus); }
+
+        .highlight-overlay, textarea {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            margin: 0; padding: 15px; border: none; box-sizing: border-box;
+            font-family: "Consolas", "Courier New", monospace; font-size: 14px; line-height: 1.5;
+            white-space: pre-wrap; word-wrap: break-word; overflow-wrap: break-word;
+        }
+        .highlight-overlay { color: transparent; overflow: hidden; pointer-events: none; }
+        /* Zero padding/radius on overlay marks is deliberate: any box model
+           change here would nudge later characters out of alignment with
+           the real text sitting on top of them. */
+        .highlight-overlay mark { color: transparent; padding: 0; margin: 0; border-radius: 2px; }
+
+        textarea { width: 100%; resize: none; outline: none; background-color: transparent; color: var(--text-main); overflow: auto; }
 
         .img-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; background-color: var(--img-bg); cursor: grab; position: relative; }
         .img-container:active { cursor: grabbing; }
@@ -206,6 +281,29 @@
             </svg>
         </button>
 
+        <!-- Toggles fuzzy medicine-name suggestions while typing in the text
+             editor (see "Medicine Name Suggestions" script section). Same
+             on/off interaction pattern as the eye icon above: click to
+             toggle, active state shown via the .active fill. -->
+        <button id="suggestToggle" class="icon-btn" title="Toggle Medicine Name Suggestions">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+        </button>
+
+        <!-- Toggles linked drug-name editing: while on, each drug name found
+             in both the TRANSCRIPTION text and the JSON's medication_list is
+             highlighted (same color = same medicine), and editing either
+             occurrence live-edits the other. See "Linked Drug Name Editing"
+             script section. -->
+        <button id="linkToggle" class="icon-btn" title="Toggle Linked Drug Name Editing">
+            <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="7" cy="12" r="4"></circle>
+                <circle cx="17" cy="12" r="4"></circle>
+                <line x1="10.5" y1="12" x2="13.5" y2="12"></line>
+            </svg>
+        </button>
+
         <!-- Dark mode switch. Checked state is initialized in JS from either a
              saved user preference (localStorage) or the OS-level
              prefers-color-scheme setting — see "Dark Mode Logic" below. -->
@@ -213,6 +311,17 @@
             <input type="checkbox" id="themeToggle">
             <span class="slider"></span>
         </label>
+
+        <div class="spacer"></div>
+
+        <!-- Live medicine lookup, centered by the spacer on each side. Backed
+             by the medicines.json dataset fetched in the "Medicine Data"
+             script section below. Purely a reference tool — doesn't touch
+             the text editor. -->
+        <div class="med-search" id="medSearchContainer">
+            <input type="text" id="medSearchInput" placeholder="Search medicines…" autocomplete="off" spellcheck="false">
+            <div class="med-search-results hidden" id="medSearchResults"></div>
+        </div>
 
         <div class="spacer"></div>
 
@@ -229,9 +338,15 @@
          Which side is which is controlled by the .swapped class (see CSS) —
          the DOM order below is always the same (leftPanel = text). -->
     <div class="workspace" id="workspace">
-        <!-- Editable transcription + JSON for the current entry -->
+        <!-- Editable transcription + JSON for the current entry, plus a
+             below-the-fold strip of fuzzy medicine-name suggestions that
+             only appears while the suggestion toggle is on. -->
         <div class="panel" id="leftPanel">
-            <textarea id="textEditor" placeholder="Transcription and JSON will appear here..." disabled></textarea>
+            <div class="editor-wrap" id="editorWrap">
+                <div class="highlight-overlay" id="highlightOverlay" aria-hidden="true"></div>
+                <textarea id="textEditor" placeholder="Transcription and JSON will appear here..." disabled></textarea>
+            </div>
+            <div class="suggest-bar hidden" id="suggestBar"></div>
         </div>
         
         <!-- Drag handle between panels; also hosts the swap button -->
@@ -247,6 +362,13 @@
             </div>
         </div>
     </div>
+
+    <!-- Fuzzy string matching (RapidFuzz/FuzzyWuzzy-style scorers) used to
+         power the medicine-name suggestion chips. Loaded as a plain UMD
+         script (no build step, matches the rest of this single-file app)
+         and exposes a global `fuzzball` object. Pinned to a specific
+         version so behavior can't silently change under this tool. -->
+    <script src="https://cdn.jsdelivr.net/npm/fuzzball@2.2.6/dist/fuzzball.umd.min.js"></script>
 
     <script>
         // --- State Variables & Elements ---
@@ -274,6 +396,15 @@
         const autoHideToggle = document.getElementById('autoHideToggle');
         const eyeIcon = document.getElementById('eyeIcon');
         const swapBtn = document.getElementById('swapBtn');
+
+        const medSearchInput = document.getElementById('medSearchInput');
+        const medSearchResults = document.getElementById('medSearchResults');
+        const medSearchContainer = document.getElementById('medSearchContainer');
+        const suggestToggle = document.getElementById('suggestToggle');
+        const suggestBar = document.getElementById('suggestBar');
+        const linkToggle = document.getElementById('linkToggle');
+        const editorWrap = document.getElementById('editorWrap');
+        const highlightOverlay = document.getElementById('highlightOverlay');
 
         // --- Dark Mode Logic ---
         // Priority order for the initial theme:
@@ -337,6 +468,503 @@
             isSwapped = !isSwapped;
             workspace.classList.toggle('swapped');
         });
+
+        // ==================================================================
+        // --- Medicine Data (search bar + fuzzy suggestions) ---
+        // ==================================================================
+        // Both features 2.1 (search bar) and 2.2 (suggestion chips) share one
+        // dataset fetched from the project's medicines.json on GitHub. This
+        // section owns: fetching + caching that data, and the small indexes
+        // built on top of it for fast lookups.
+        const MEDICINES_URL = 'https://raw.githubusercontent.com/Rafee-M/ML-Prescription-OCR-CSE299/refs/heads/main/data/medicines.json';
+        const MEDICINES_CACHE_KEY = 'ocrCorrector.medicinesCache.v1';
+        const SUGGEST_ENABLED_KEY = 'ocrCorrector.suggestEnabled';
+
+        let medicines = [];          // Flat array of { brand_name, dosage_form, strength, slug, _nameLower }
+        let medicinesByLetter = new Map(); // lowercase first char -> array of `medicines` entries (cheap prefilter bucket)
+        let medicinesReady = false;
+        let suggestionsEnabled = localStorage.getItem(SUGGEST_ENABLED_KEY) === 'true';
+
+        // Turns the raw {"0": {...}, "1": {...}, ...} object from the JSON
+        // file into a flat array, precomputing a lowercase name once per
+        // entry so neither the search bar nor the suggestion scorer has to
+        // re-lowercase potentially tens of thousands of strings on every
+        // single keystroke.
+        function indexMedicines(rawObject) {
+            medicines = Object.values(rawObject)
+                .filter(m => m && typeof m.brand_name === 'string' && m.brand_name.trim())
+                .map(m => ({ ...m, _nameLower: m.brand_name.toLowerCase() }));
+
+            medicinesByLetter = new Map();
+            for (const med of medicines) {
+                const letter = med._nameLower[0];
+                if (!letter) continue;
+                if (!medicinesByLetter.has(letter)) medicinesByLetter.set(letter, []);
+                medicinesByLetter.get(letter).push(med);
+            }
+            medicinesReady = medicines.length > 0;
+        }
+
+        // Stale-while-revalidate: render instantly from whatever's cached
+        // locally (if anything), then always refetch in the background so
+        // the cache stays reasonably fresh without blocking first paint.
+        async function loadMedicines() {
+            try {
+                const cachedRaw = localStorage.getItem(MEDICINES_CACHE_KEY);
+                if (cachedRaw) indexMedicines(JSON.parse(cachedRaw));
+            } catch (err) {
+                console.warn('Medicine cache unreadable, ignoring it:', err);
+            }
+
+            try {
+                const res = await fetch(MEDICINES_URL);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                indexMedicines(data);
+                try {
+                    localStorage.setItem(MEDICINES_CACHE_KEY, JSON.stringify(data));
+                } catch (err) {
+                    // Quota exceeded or similar — fine, we still have it in memory for this session.
+                    console.warn('Could not cache medicines locally:', err);
+                }
+            } catch (err) {
+                // Network/CORS failure (e.g. offline, or the page was opened via
+                // file:// where cross-origin fetch is blocked by the browser).
+                // If we at least had a cached copy from before, silently keep
+                // using that instead of surfacing an error.
+                console.warn('Medicine data fetch failed:', err);
+                if (!medicinesReady) {
+                    medSearchInput.placeholder = 'Medicine data unavailable';
+                    medSearchInput.disabled = true;
+                }
+            }
+        }
+        loadMedicines();
+
+        // Generic debounce: delays `fn` until `wait` ms of silence. Used for
+        // both the search box and the in-editor suggestion lookup so fast
+        // typing doesn't trigger a full rescan on every keystroke.
+        function debounce(fn, wait) {
+            let timer = null;
+            return (...args) => {
+                clearTimeout(timer);
+                timer = setTimeout(() => fn(...args), wait);
+            };
+        }
+
+        // Renders `text` into `el` with the portion matching `query`
+        // (case-insensitive, first occurrence) wrapped in <mark>. Built with
+        // textContent/createElement rather than innerHTML so medicine names
+        // from the data file can never be interpreted as markup.
+        function renderHighlighted(el, text, query) {
+            el.textContent = '';
+            const lower = text.toLowerCase();
+            const q = query.toLowerCase();
+            const idx = q ? lower.indexOf(q) : -1;
+            if (idx === -1) { el.textContent = text; return; }
+            if (idx > 0) el.appendChild(document.createTextNode(text.slice(0, idx)));
+            const mark = document.createElement('mark');
+            mark.textContent = text.slice(idx, idx + q.length);
+            el.appendChild(mark);
+            if (idx + q.length < text.length) el.appendChild(document.createTextNode(text.slice(idx + q.length)));
+        }
+
+        // --- 2.1: Search bar ---
+        // Algorithm: a single linear pass over `medicines`, bucketed into
+        // "name starts with query" vs "name contains query elsewhere", each
+        // sorted with shorter (closer) names first. A plain scan is plenty
+        // fast at this dataset's scale (tens of thousands of short strings
+        // scans in low single-digit milliseconds), so a prefix-trie or
+        // similar index isn't worth the added complexity here — the early
+        // MAX_SCAN cutoff below just keeps the worst case bounded if the
+        // dataset ever grows substantially.
+        const MAX_SEARCH_RESULTS = 20;
+        const MAX_SCAN = 8000;
+
+        function searchMedicines(query) {
+            const q = query.trim().toLowerCase();
+            if (!q) return [];
+            const startsWith = [];
+            const contains = [];
+            for (let i = 0; i < medicines.length && i < MAX_SCAN; i++) {
+                const idx = medicines[i]._nameLower.indexOf(q);
+                if (idx === 0) startsWith.push(medicines[i]);
+                else if (idx > 0) contains.push(medicines[i]);
+            }
+            startsWith.sort((a, b) => a.brand_name.length - b.brand_name.length);
+            contains.sort((a, b) => a.brand_name.length - b.brand_name.length);
+            return startsWith.concat(contains).slice(0, MAX_SEARCH_RESULTS);
+        }
+
+        function renderSearchResults(query) {
+            const results = medicinesReady ? searchMedicines(query) : [];
+            medSearchResults.textContent = '';
+
+            if (!query.trim()) { medSearchResults.classList.add('hidden'); return; }
+
+            if (!medicinesReady) {
+                const status = document.createElement('div');
+                status.className = 'med-search-status';
+                status.textContent = 'Loading medicine data…';
+                medSearchResults.appendChild(status);
+            } else if (results.length === 0) {
+                const status = document.createElement('div');
+                status.className = 'med-search-status';
+                status.textContent = 'No matching medicines.';
+                medSearchResults.appendChild(status);
+            } else {
+                for (const med of results) {
+                    const item = document.createElement('div');
+                    item.className = 'med-result-item';
+
+                    const nameEl = document.createElement('div');
+                    nameEl.className = 'med-result-name';
+                    renderHighlighted(nameEl, med.brand_name, query);
+
+                    const metaEl = document.createElement('div');
+                    metaEl.className = 'med-result-meta';
+                    metaEl.textContent = [med.dosage_form, med.strength].filter(Boolean).join(' · ');
+
+                    item.appendChild(nameEl);
+                    item.appendChild(metaEl);
+                    medSearchResults.appendChild(item);
+                }
+            }
+            medSearchResults.classList.remove('hidden');
+        }
+
+        const handleSearchInput = debounce(() => renderSearchResults(medSearchInput.value), 120);
+        medSearchInput.addEventListener('input', handleSearchInput);
+        medSearchInput.addEventListener('focus', () => { if (medSearchInput.value.trim()) renderSearchResults(medSearchInput.value); });
+        document.addEventListener('click', (e) => {
+            if (!medSearchContainer.contains(e.target)) medSearchResults.classList.add('hidden');
+        });
+        medSearchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { medSearchInput.blur(); medSearchResults.classList.add('hidden'); }
+        });
+
+        // --- 2.2: Fuzzy medicine-name suggestions while editing ---
+        suggestToggle.classList.toggle('active', suggestionsEnabled);
+        suggestToggle.addEventListener('click', () => {
+            suggestionsEnabled = !suggestionsEnabled;
+            suggestToggle.classList.toggle('active', suggestionsEnabled);
+            localStorage.setItem(SUGGEST_ENABLED_KEY, String(suggestionsEnabled));
+            if (!suggestionsEnabled) hideSuggestions();
+            else updateSuggestions();
+        });
+
+        let currentSuggestionRange = null; // { start, end } into textEditor.value for the word suggestions were computed from
+
+        function hideSuggestions() {
+            suggestBar.classList.add('hidden');
+            suggestBar.textContent = '';
+            currentSuggestionRange = null;
+        }
+
+        // Finds the run of non-whitespace/non-punctuation characters the
+        // caret currently sits inside — used as the fuzzy-match query.
+        function getWordAtCaret(text, caretPos) {
+            const isBoundary = (ch) => ch === undefined || /[\s,;:()[\]{}"]/.test(ch);
+            let start = caretPos, end = caretPos;
+            while (start > 0 && !isBoundary(text[start - 1])) start--;
+            while (end < text.length && !isBoundary(text[end])) end++;
+            return { start, end, word: text.slice(start, end) };
+        }
+
+        const MIN_SUGGEST_LEN = 2;
+        const SUGGEST_LIMIT = 4;
+        // 70 was chosen empirically (see testing notes): WRatio leans on
+        // partial_ratio internally, which can score short queries ~65-70
+        // against a completely unrelated longer name just because some
+        // 4-letter substring happens to look similar. 70 filters that noise
+        // out in testing while still catching real partial-prefix matches
+        // ("Nidocar" -> "Nidocard Retard" scores 90). Worth re-tuning once
+        // tested against the real ~thousands-of-entries dataset.
+        const SUGGEST_CUTOFF = 70;
+
+        function computeSuggestions(word) {
+            // Cheap prefilter: only fuzzy-score medicines sharing the word's
+            // first letter before running the more expensive RapidFuzz-style
+            // scorer. This trades typo-tolerance on the very first character
+            // for a large reduction in comparisons on bigger datasets — a
+            // standard "candidate generation, then score" pattern. Falls
+            // back to the full list if that bucket is too small to be useful.
+            const letter = word[0].toLowerCase();
+            let candidates = medicinesByLetter.get(letter) || [];
+            if (candidates.length < 20) candidates = medicines;
+
+            const choices = candidates.map(m => m.brand_name);
+            // WRatio is fuzzball's "just give me the best overall similarity"
+            // composite scorer (mirrors RapidFuzz's default WRatio) — it
+            // blends plain, partial, and token-based ratios, which handles
+            // both partial prefixes ("Bet" -> "Betaloc") and word-order
+            // variance reasonably well without having to hand-pick a scorer.
+            const results = fuzzball.extract(word, choices, {
+                scorer: fuzzball.WRatio,
+                limit: SUGGEST_LIMIT,
+                cutoff: SUGGEST_CUTOFF,
+            });
+            // fuzzball.extract returns [choiceString, score, index] triples;
+            // using the returned index (rather than re-searching `choices`
+            // for the string) is both faster and safe if two medicines
+            // happen to share an identical brand_name.
+            return results.map(([, , idx]) => candidates[idx]);
+        }
+
+        function updateSuggestions() {
+            if (!suggestionsEnabled || !medicinesReady || textEditor.disabled) { hideSuggestions(); return; }
+            const { start, end, word } = getWordAtCaret(textEditor.value, textEditor.selectionStart);
+            if (word.length < MIN_SUGGEST_LEN) { hideSuggestions(); return; }
+
+            const suggestions = computeSuggestions(word);
+            if (suggestions.length === 0) { hideSuggestions(); return; }
+
+            currentSuggestionRange = { start, end };
+            suggestBar.textContent = '';
+            for (const med of suggestions) {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'suggest-chip';
+                renderHighlighted(chip, med.brand_name, word);
+                chip.addEventListener('click', () => applySuggestion(med.brand_name));
+                suggestBar.appendChild(chip);
+            }
+            suggestBar.classList.remove('hidden');
+        }
+        const scheduleSuggestionUpdate = debounce(updateSuggestions, 150);
+
+        // Replaces the word suggestions were computed for with the chosen
+        // medicine name, keeping the editor's own state (entries[], the
+        // unsaved-changes flag, and the linked drug-name pairing) in sync
+        // exactly like a normal keystroke would.
+        function applySuggestion(name) {
+            if (!currentSuggestionRange) return;
+            const { start, end } = currentSuggestionRange;
+            const oldContent = textEditor.value;
+            let newContent = oldContent.slice(0, start) + name + oldContent.slice(end);
+            let newCaret = start + name.length;
+
+            if (linkSyncEnabled && entries[currentIndex]) {
+                const result = applyLinkedEdit(oldContent, newContent, newCaret);
+                newContent = result.content;
+                newCaret = result.caret;
+            }
+
+            textEditor.value = newContent;
+            textEditor.focus();
+            textEditor.setSelectionRange(newCaret, newCaret);
+
+            if (entries[currentIndex]) entries[currentIndex].content = newContent;
+            hasUnsavedChanges = true;
+            refreshLinkState(newContent);
+            hideSuggestions();
+        }
+
+        // Recompute on typing (debounced) and immediately on caret movement
+        // via click/arrow keys, so suggestions follow wherever the cursor is.
+        textEditor.addEventListener('input', scheduleSuggestionUpdate);
+        textEditor.addEventListener('click', updateSuggestions);
+        textEditor.addEventListener('keyup', (e) => {
+            if (e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End') updateSuggestions();
+        });
+        textEditor.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') hideSuggestions();
+        });
+
+        // ==================================================================
+        // --- Linked Drug Name Editing ---
+        // ==================================================================
+        // Scope, deliberately narrow (see conversation): ONLY drug names are
+        // linked, matched by the order they appear in — not by literal text
+        // identity. A naive "same text = linked" rule would be actively
+        // dangerous here: values like "Tab", duration "চলবে", or a frequency
+        // pattern like "০+০+১" legitimately repeat across several unrelated
+        // medicines in the same entry, and blindly syncing all occurrences of
+        // one would corrupt the others. Drug names don't have that problem —
+        // they're normally unique within a single prescription — so pairing
+        // "the Nth drug_name in medication_list" with "the Nth drug-name
+        // substring encountered in the transcription text" is safe.
+        const LINK_SYNC_KEY = 'ocrCorrector.linkSyncEnabled';
+        const LINK_COLORS = [
+            'rgba(59,130,246,0.35)',  // blue
+            'rgba(16,185,129,0.35)',  // green
+            'rgba(245,158,11,0.35)',  // amber
+            'rgba(236,72,153,0.35)',  // pink
+            'rgba(139,92,246,0.35)',  // violet
+            'rgba(20,184,166,0.35)',  // teal
+        ];
+        let linkSyncEnabled = localStorage.getItem(LINK_SYNC_KEY) === 'true';
+        let cachedPairs = []; // Drug-name pairs for the CURRENTLY DISPLAYED content; recomputed after every change
+
+        // Scans one entry's raw content (TRANSCRIPTION + JSON blob) and
+        // returns, for each drug_name in medication_list (in order), the
+        // character range where that name occurs on both sides — or skips
+        // it if either side can't be located.
+        //
+        // Deliberately regex-based rather than JSON.parse: this keeps
+        // working even while the JSON is temporarily invalid mid-edit (a
+        // missing brace elsewhere shouldn't break linking for names that
+        // are still intact), and gives exact character offsets for free,
+        // which JSON.parse would otherwise discard.
+        function findDrugNamePairs(content) {
+            const transMarker = 'TRANSCRIPTION:';
+            const jsonMarker = 'JSON:';
+            const transMarkerIdx = content.indexOf(transMarker);
+            if (transMarkerIdx === -1) return [];
+            const jsonMarkerIdx = content.indexOf(jsonMarker, transMarkerIdx);
+            if (jsonMarkerIdx === -1 || jsonMarkerIdx <= transMarkerIdx) return [];
+
+            const transStart = transMarkerIdx + transMarker.length;
+            const transText = content.slice(transStart, jsonMarkerIdx);
+            const jsonStart = jsonMarkerIdx + jsonMarker.length;
+            const jsonText = content.slice(jsonStart);
+
+            const drugNameRegex = /"drug_name"\s*:\s*"([^"]*)"/g;
+            const pairs = [];
+            let searchCursor = 0; // Cursor into transText — keeps matches in order & non-overlapping
+            let m;
+            while ((m = drugNameRegex.exec(jsonText)) !== null) {
+                const name = m[1];
+                if (!name) continue;
+
+                const jsonValueEnd = m.index + m[0].length - 1; // Index of the value's closing quote (exclusive end of the value itself)
+                const jsonValueStart = jsonValueEnd - name.length;
+
+                const localTransIdx = transText.indexOf(name, searchCursor);
+                if (localTransIdx === -1) continue; // Couldn't anchor this one in the transcription text — leave unlinked rather than guess
+
+                searchCursor = localTransIdx + name.length;
+
+                pairs.push({
+                    name,
+                    transStart: transStart + localTransIdx,
+                    transEnd: transStart + localTransIdx + name.length,
+                    jsonStart: jsonStart + jsonValueStart,
+                    jsonEnd: jsonStart + jsonValueEnd,
+                });
+            }
+            return pairs;
+        }
+
+        // Rebuilds the invisible-text overlay behind the textarea. With no
+        // pairs (or the feature off), it's just a plain-text mirror — the
+        // "+ ' '" at the end is a well-known fix for textarea/div height
+        // parity when the content ends on an empty line.
+        function renderHighlightOverlay(content, pairs) {
+            highlightOverlay.textContent = '';
+            if (!pairs.length) {
+                highlightOverlay.appendChild(document.createTextNode(content + ' '));
+                return;
+            }
+            const ranges = [];
+            pairs.forEach((p, i) => {
+                ranges.push({ start: p.transStart, end: p.transEnd, color: i });
+                ranges.push({ start: p.jsonStart, end: p.jsonEnd, color: i });
+            });
+            ranges.sort((a, b) => a.start - b.start);
+
+            let cursor = 0;
+            for (const r of ranges) {
+                if (r.start < cursor) continue; // Defensive: ignore any accidental overlap
+                if (r.start > cursor) highlightOverlay.appendChild(document.createTextNode(content.slice(cursor, r.start)));
+                const mark = document.createElement('mark');
+                mark.textContent = content.slice(r.start, r.end);
+                mark.style.backgroundColor = LINK_COLORS[r.color % LINK_COLORS.length];
+                highlightOverlay.appendChild(mark);
+                cursor = r.end;
+            }
+            if (cursor < content.length) highlightOverlay.appendChild(document.createTextNode(content.slice(cursor)));
+            highlightOverlay.appendChild(document.createTextNode(' '));
+        }
+
+        function refreshLinkState(content) {
+            cachedPairs = linkSyncEnabled ? findDrugNamePairs(content) : [];
+            renderHighlightOverlay(content, cachedPairs);
+        }
+
+        // Keeps the overlay scrolled to exactly match the textarea, since
+        // the overlay is never scrolled directly by the user (see CSS).
+        textEditor.addEventListener('scroll', () => {
+            highlightOverlay.scrollTop = textEditor.scrollTop;
+            highlightOverlay.scrollLeft = textEditor.scrollLeft;
+        });
+
+        linkToggle.classList.toggle('active', linkSyncEnabled);
+        linkToggle.addEventListener('click', () => {
+            linkSyncEnabled = !linkSyncEnabled;
+            linkToggle.classList.toggle('active', linkSyncEnabled);
+            localStorage.setItem(LINK_SYNC_KEY, String(linkSyncEnabled));
+            refreshLinkState(textEditor.value);
+        });
+
+        // Minimal-edit diff between two strings via common-prefix/common-
+        // suffix trimming. Handles single keystrokes, deletions, and pasted
+        // replacements alike, without pulling in a diff library.
+        function diffText(oldStr, newStr) {
+            let start = 0;
+            const maxStart = Math.min(oldStr.length, newStr.length);
+            while (start < maxStart && oldStr[start] === newStr[start]) start++;
+            let oldEnd = oldStr.length, newEnd = newStr.length;
+            while (oldEnd > start && newEnd > start && oldStr[oldEnd - 1] === newStr[newEnd - 1]) { oldEnd--; newEnd--; }
+            return { start, oldEnd, inserted: newStr.slice(start, newEnd) };
+        }
+
+        // Was the edit [start, oldEnd) (in OLD content coordinates) fully
+        // inside one side of a known pair? Returns which pair + which side,
+        // or null if the edit fell outside any linked name.
+        function findContainingPairSide(pairs, start, oldEnd) {
+            for (const p of pairs) {
+                if (start >= p.transStart && oldEnd <= p.transEnd) return { pair: p, side: 'trans' };
+                if (start >= p.jsonStart && oldEnd <= p.jsonEnd) return { pair: p, side: 'json' };
+            }
+            return null;
+        }
+
+        // Given the content before/after a keystroke (plus where the caret
+        // landed), mirrors the edit onto the other half of the pair if the
+        // edit happened inside a linked drug name. Returns the (possibly
+        // further-modified) content and the caret position adjusted to
+        // account for that second edit — see conversation notes on the
+        // offset math: the transcription section always precedes the JSON
+        // section in this file format, which is what makes the two cases
+        // below exhaustive.
+        function applyLinkedEdit(oldContent, newContent, caretAfterInput) {
+            const diff = diffText(oldContent, newContent);
+            const hit = findContainingPairSide(cachedPairs, diff.start, diff.oldEnd);
+            if (!hit) return { content: newContent, caret: caretAfterInput };
+
+            const { pair, side } = hit;
+            const editedRange = side === 'trans' ? { start: pair.transStart, end: pair.transEnd } : { start: pair.jsonStart, end: pair.jsonEnd };
+            const otherRange = side === 'trans' ? { start: pair.jsonStart, end: pair.jsonEnd } : { start: pair.transStart, end: pair.transEnd };
+
+            const localStart = diff.start - editedRange.start;
+            const localOldEnd = diff.oldEnd - editedRange.start;
+            const oldName = oldContent.slice(editedRange.start, editedRange.end);
+            const newName = oldName.slice(0, localStart) + diff.inserted + oldName.slice(localOldEnd);
+
+            let finalContent, finalCaret = caretAfterInput;
+
+            if (side === 'trans') {
+                // The JSON-side occurrence always comes later in the text, so its
+                // offsets shift by however much the transcription-side edit
+                // changed the text length. The caret (still in the transcription
+                // section) is unaffected by an edit that happens after it.
+                const delta = diff.inserted.length - (diff.oldEnd - diff.start);
+                const shiftedStart = otherRange.start + delta;
+                const shiftedEnd = otherRange.end + delta;
+                finalContent = newContent.slice(0, shiftedStart) + newName + newContent.slice(shiftedEnd);
+            } else {
+                // The transcription-side occurrence always comes earlier, so its
+                // own offsets are unaffected by an edit later in the JSON — but
+                // splicing our mirrored edit in there DOES shift everything
+                // after it, including the caret (which is in the JSON section).
+                finalContent = newContent.slice(0, otherRange.start) + newName + newContent.slice(otherRange.end);
+                const delta2 = newName.length - (otherRange.end - otherRange.start);
+                finalCaret = caretAfterInput + delta2;
+            }
+
+            return { content: finalContent, caret: finalCaret };
+        }
 
         // Revokes every blob: URL currently in imageMap. Object URLs are not
         // garbage-collected automatically — each createObjectURL() call pins
@@ -419,13 +1047,33 @@
             prevBtn.disabled = index === 0;
             nextBtn.disabled = index === entries.length - 1;
             resetZoom(); // Each new image starts at 1x zoom, no pan offset
+            hideSuggestions(); // Previous entry's suggestion chips no longer apply
+            refreshLinkState(entry.content); // Rebuild drug-name pairs + overlay for the new entry
+            highlightOverlay.scrollTop = 0;
+            highlightOverlay.scrollLeft = 0;
         }
 
         // Keeps the in-memory entries array in sync with every keystroke, so
         // switching entries (or exporting) always reflects the latest edits.
+        // When linked drug-name editing is on, this is also where a keystroke
+        // inside one linked name gets mirrored onto its pair (see
+        // applyLinkedEdit in the "Linked Drug Name Editing" section above).
         textEditor.addEventListener('input', (e) => {
-            if (entries[currentIndex]) entries[currentIndex].content = e.target.value;
+            const oldContent = entries[currentIndex] ? entries[currentIndex].content : '';
+            let newContent = e.target.value;
+
+            if (linkSyncEnabled && entries[currentIndex]) {
+                const result = applyLinkedEdit(oldContent, newContent, textEditor.selectionStart);
+                if (result.content !== newContent) {
+                    newContent = result.content;
+                    textEditor.value = newContent;
+                    textEditor.setSelectionRange(result.caret, result.caret);
+                }
+            }
+
+            if (entries[currentIndex]) entries[currentIndex].content = newContent;
             hasUnsavedChanges = true;
+            refreshLinkState(newContent);
         });
 
         prevBtn.addEventListener('click', () => showEntry(currentIndex - 1));
